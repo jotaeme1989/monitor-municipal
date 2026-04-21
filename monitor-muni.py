@@ -1,10 +1,9 @@
-
-
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import time
 from datetime import datetime
+import pytz # Asegúrate de haberlo agregado al requirements.txt
 import urllib3
 import os
 
@@ -12,6 +11,16 @@ import os
 TOKEN_TELEGRAM = "8613120185:AAH5u4790dTCU4VekKf4e4LS8TC5dl7KxEM"
 CHAT_ID_TELEGRAM = "7240660332"
 
+# Forzar zona horaria de Chile
+chile_tz = pytz.timezone('America/Santiago')
+
+# ... (El resto de tus funciones de envío y carga de URLs)
+
+ahora_chile = datetime.now(chile_tz).strftime("%H:%M:%S")
+st.write(f"### Última revisión (Hora Chile): {ahora_chile}")
+
+# Al final del código, antes del sleep:
+enviar_telegram(f"🤖 *Monitor Activo*\nRevisión de las {ahora_chile} completada.")
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def enviar_telegram(mensaje):
