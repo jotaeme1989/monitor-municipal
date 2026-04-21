@@ -59,44 +59,62 @@ st.info(f"🚀 Monitor activo cada {intervalo} minutos.")
 contenedor = st.container()
 
 while True:
-    ahora_chile = datetime.now(chile_tz).strftime("%H:%M:%S")
-    with contenedor:
-        st.write(f"### --- Revisión (Chile): {ahora_chile} ---")
-        for url in lista_urls:
-            try:
-                res = requests.get(url, headers=header_fake, timeout=20, verify=False)
-                soup = BeautifulSoup(res.text, 'html.parser')
-                enlaces = []
-                for a in soup.find_all('a', href=True):
-                    if any(kw in a.get_text().lower() for kw in lista_keywords):
-                        href = a['href']
-                        final = href if href.startswith('http') else url.rstrip('/') + '/' + href.lstrip('/')
-                        enlaces.append(final)
-                if enlaces:
-                    enlaces = list(set(enlaces))
-                    st.success(f"🚨 Encontrado en {url}")
-                    enviar_telegram(f"🏢 *MUNICIPIO:* {url}\n🔗 " + "\n🔗 ".join(enlaces))
-                else:
-                    st.text(f"⚪ {url}: Sin novedades")
-            except:
-                st.warning(f"⚠️ Error: {url}")
-        
-        if activar_ep:
-            try:
-                url_ep = f"https://www.empleospublicos.cl/pub/convocatorias/convocatorias.aspx?pPalabrasClaves={busqueda_ep}"
-                res_ep = requests.get(url_ep, headers=header_fake, timeout=25)
-                soup_ep = BeautifulSoup(res_ep.text, 'html.parser')
-                found = False
-                for row in soup_ep.find_all('tr'):
-                    if busqueda_ep.lower() in row.get_text().lower():
-                        link = row.find('a', href=True)
-                        if link:
-                            found = True
-                            full_link = "https://www.empleospublicos.cl" + link['href']
-                            enviar_telegram(f"💼 *PORTAL:* {link.get_text().strip()}\n🔗 {full_link}")
-                if not found: st.text("⚪ Empleos Públicos: Sin novedades.")
-            except: pass
+    # 1. Obtener la hora actual de Chile
+    ahora_completa = datetime.now(chile_tz)
+    hora_actual = ahora_completa.hour
+    ahora_str = ahora_completa.strftime("%H:%M:%S")
 
-    enviar_telegram(f"🤖 *Monitor Activo*\nRevisión de las {ahora_chile} completa.")
+    # 2. Verificar el horario (de 7 a 23 hrs)
+    if 7 <= hora_actual < 23:
+        with contenedor:
+            st.write(f"### --- Revisión (Chile): {ahora_str} ---")
+            
+            # --- ESCANEO DE MUNICIPIOS ---
+            for url in lista_urls:
+                try:
+                    res = requests.get(url, headers=header_fake, timeout=20, verify=False)
+                    soup = BeautifulSoup(res.text, 'html.parser')
+                    enlaces = []
+                    for a in soup.find_all('a', href=True):
+                        if any(kw in a.get_text().lower() for kw in lista_keywords):
+                            href = a['href']
+                            final = href if href.startswith('http') else url.rstrip('/') + '/' + href.lstrip('/')
+                            enlaces.append(final)
+                    
+                    if enlaces:
+                        enlaces = list(set(enlaces))
+                        st.success(f"🚨 Encontrado en {url}")
+                        enviar_telegram(f"🏢 *MUNICIPIO:* {url}\n🔗 " + "\n🔗 ".join(enlaces))
+                    else:
+                        st.text(f"⚪ {url}: Sin novedades")
+                except:
+                    st.warning(f"⚠️ Error: {url}")
+            
+            # --- ESCANEO EMPLEOS PÚBLICOS ---
+            if activar_ep:
+                try:
+                    url_ep = f"https://www.empleospublicos.cl/pub/convocatorias/convocatorias.aspx?pPalabrasClaves={busqueda_ep}"
+                    res_ep = requests.get(url_ep, headers=header_fake, timeout=25)
+                    soup_ep = BeautifulSoup(res_ep.text, 'html.parser')
+                    found = False
+                    for row in soup_ep.find_all('tr'):
+                        if busqueda_ep.lower() in row.get_text().lower():
+                            link = row.find('a', href=True)
+                            if link:
+                                found = True
+                                full_link = "https://www.empleospublicos.cl" + link['href']
+                                enviar_telegram(f"💼 *PORTAL:* {link.get_text().strip()}\n🔗 {full_link}")
+                    if not found: st.text("⚪ Empleos Públicos: Sin novedades.")
+                except:
+                    st.warning("⚠️ Error en Portal Empleos Públicos")
+
+        enviar_telegram(f"🤖 *Monitor Activo*\nRevisión de las {ahora_str} completa.")
+    
+    else:
+        # Modo descanso
+        with contenedor:
+            st.write(f"💤 Fuera de horario (Son las {ahora_str}). El monitor descansará hasta las 07:00 AM.")
+
+    # 3. Esperar el intervalo y reiniciar
     time.sleep(intervalo * 60)
     st.rerun()
