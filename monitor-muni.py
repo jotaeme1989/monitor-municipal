@@ -111,6 +111,8 @@ for url in lista_urls:
     nombre_muni = extrair_nombre_muni(url)
     enlaces_encontrados = []
     error_msg = None
+    
+    # 1. Intenta conectarse a la web
     try:
         res = requests.get(url, headers=header_fake, timeout=20, verify=False)
         soup = BeautifulSoup(res.text, 'html.parser')
@@ -123,16 +125,37 @@ for url in lista_urls:
     except:
         error_msg = "Error de conexión."
 
+    # 2. Dibuja el cubo con el botón de "Ir a la Web"
     with cols[idx_col % 4]:
         if error_msg:
-            st.markdown(f"<div class='muni-card muni-error'><h3>{nombre_muni}</h3><p style='color:orange;'>{error_msg}</p></div>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class='muni-card muni-error'>
+                    <h3>{nombre_muni}</h3>
+                    <p style='color:orange;'>{error_msg}</p>
+                    <a href='{url}' target='_blank'><button style='width:100%; border:none; border-radius:5px; background-color:#52a1e5; color:white; padding:5px; cursor:pointer;'>Ir a la Web</button></a>
+                </div>
+            """, unsafe_allow_html=True)
         elif enlaces_encontrados:
             enlaces_unicos = list(set(enlaces_encontrados))
-            st.markdown(f"<div class='muni-card muni-alerta'><h3>{nombre_muni}</h3><p style='color:red;'><b>¡Alerta! {len(enlaces_unicos)} hallazgos.</b></p></div>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class='muni-card muni-alerta'>
+                    <h3>{nombre_muni}</h3>
+                    <p style='color:red;'><b>¡Alerta! {len(enlaces_unicos)} hallazgos.</b></p>
+                    <a href='{url}' target='_blank'><button style='width:100%; border:none; border-radius:5px; background-color:#52a1e5; color:white; padding:5px; cursor:pointer;'>Ir a la Web</button></a>
+                </div>
+            """, unsafe_allow_html=True)
             enviar_telegram(f"🚨 ALERTA: {nombre_muni} - {enlaces_unicos[0]}")
         else:
-            st.markdown(f"<div class='muni-card muni-ok'><h3>{nombre_muni}</h3><p style='color:green;'>Sin novedades.</p></div>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class='muni-card muni-ok'>
+                    <h3>{nombre_muni}</h3>
+                    <p style='color:green;'>Sin novedades.</p>
+                    <a href='{url}' target='_blank'><button style='width:100%; border:none; border-radius:5px; background-color:#52a1e5; color:white; padding:5px; cursor:pointer;'>Ir a la Web</button></a>
+                </div>
+            """, unsafe_allow_html=True)
+    
     idx_col += 1
 
+# --- ESPERA Y REINICIO ---
 time.sleep(intervalo * 60)
 st.rerun()
