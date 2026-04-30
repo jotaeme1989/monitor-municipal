@@ -3,83 +3,54 @@ import requests
 from bs4 import BeautifulSoup
 import time
 from datetime import datetime
-import pytz 
+import pytz
 import urllib3
 import os
 
 # --- CONFIGURACIÓN ---
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 TOKEN_TELEGRAM = "8613120185:AAH5u4790dTCU4VekKf4e4LS8TC5dl7KxEM"
 CHAT_ID_TELEGRAM = "7240660332"
 chile_tz = pytz.timezone('America/Santiago')
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+def extrair_nombre_muni(url):
+    nombres_municipios = {
+        "pintana.cl": "La Pintana",
+        "mpuentealto.cl": "Puente Alto",
+        "municipalidadelbosque.cl": "El Bosque",
+        "sanbernardo.cl": "San Bernardo",
+        "laflorida.cl": "La Florida",
+        "municipalidadlagranja.cl": "La Granja",
+        "sanramon.cl": "San Ramón",
+        "cisterna.cl": "La Cisterna",
+        "loespejo.cl": "Lo Espejo",
+        "sanmiguel.cl": "San Miguel",
+        "sanjoaquin.cl": "San Joaquín",
+        "macul.cl": "Macul",
+        "penalolen.cl": "Peñalolén",
+        "mcerrillos.cl": "Cerrillos",
+        "estacioncentral.cl": "Estación Central",
+        "munistgo.cl": "Santiago Centro",
+        "nunoa.cl": "Ñuñoa",
+        "providencia.cl": "Providencia",
+        "independencia.cl": "Independencia",
+        "recoleta.cl": "Recoleta",
+        "pirque.cl": "Pirque",
+        "loprado.cl": "Lo Prado",
+        "empleospublicos.cl": "Portal Empleos Públicos"
+    }
+    url_lower = url.lower()
+    for dominio, nombre_real in nombres_municipios.items():
+        if dominio in url_lower:
+            return nombre_real
+    return url.split("//")[-1].split("/")[0]
 
-# --- ESTILOS CSS PERSONALIZADOS ---
-def apply_custom_styles():
-    st.markdown("""
-        <style>
-        /* Estilo general para las tarjetas */
-        .muni-card {
-            border-radius: 12px;
-            padding: 20px;
-            margin: 10px;
-            min-height: 180px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .muni-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 15px rgba(0,0,0,0.15);
-        }
-        
-        /* Colores por estado */
-        .status-ok { background-color: #f0fff4; border: 2px solid #38a169; } /* Verde - Sin novedades */
-        .status-found { background-color: #f7fff7; border: 2px solid #f56565; color: #f56565;} /* Verde clarito con rojo - Encontrado */
-        .status-error { background-color: #fffaf0; border: 2px solid #ed8936; } /* Amarillo - Error */
-        
-        /* Textos */
-        .card-title {
-            font-size: 1.1rem;
-            font-weight: bold;
-            color: #2d3748;
-            word-wrap: break-word;
-            margin-bottom: 8px;
-        }
-        .card-status {
-            font-size: 0.9rem;
-            color: #718096;
-            margin-bottom: 12px;
-        }
-        .card-links {
-            font-size: 0.85rem;
-            color: #4a5568;
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            max-height: 80px;
-            overflow-y: auto;
-        }
-        
-        /* Botón/Enlace de la tarjeta */
-        .card-btn {
-            display: inline-block;
-            background-color: #4299e1;
-            color: white !important;
-            padding: 8px 15px;
-            text-decoration: none !important;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            font-weight: bold;
-            margin-top: 10px;
-            text-align: center;
-        }
-        .card-btn:hover { background-color: #3182ce; }
-        
-        </style>
-    """, unsafe_allow_html=True)
+def es_contenido_valido(texto_o_url):
+    palabras_basura = ["vacunacion", "vacunación", "influenza", "cuenta-publica", "youtube", "watch?v", "eleccionarios", "pago-de-permiso", "pagos"]
+    texto_lower = texto_o_url.lower()
+    if any(basura in texto_lower for basura in palabras_basura):
+        return False
+    return True
 
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TOKEN_TELEGRAM}/sendMessage"
@@ -93,129 +64,75 @@ def cargar_urls():
     if os.path.exists("sitios.txt"):
         with open("sitios.txt", "r") as f:
             return f.read()
-    return "https://mcerrillos.cl\nhttps://www.munistgo.cl/transparencia/concursos/"
-
-def extrair_nombre_muni(url):
-    try:
-        nombre = url.split("//")[1].split(".")[1].capitalize()
-        return nombre
-    except:
-        return "Muni Desconocida"
+    return "https://www.munistgo.cl/transparencia/concursos/"
 
 # --- INTERFAZ ---
-st.set_page_config(page_title="Dashboard Municipal PRO", page_icon="📊", layout="wide")
-apply_custom_styles() # Aplicar los estilos CSS
-
+st.set_page_config(page_title="Monitor Municipal PRO", page_icon="📊", layout="wide")
 st.title("📊 Monitor Municipal (Versión Dashboard 24/7)")
+
+st.markdown("""
+    <style>
+    .muni-card {
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px;
+        border: 2px solid #f0f2f6;
+        height: 250px;
+        overflow-y: auto;
+    }
+    .muni-alerta { border: 2px solid #ff4b4b; background-color: #fffafa; }
+    .muni-ok { border: 2px solid #28a745; background-color: #f8fff9; }
+    .muni-error { border: 2px solid #ffa500; background-color: #fffaf0; }
+    </style>
+""", unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("⚙️ Configuración")
-    urls_input = st.text_area("URLs Municipales (una por línea)", value=cargar_urls(), height=250)
-    keywords_input = st.text_input("Palabras Clave (separadas por coma)", value="2026, informática, soporte, técnico, bases, llamado")
-    intervalo = st.number_input("Intervalo de revisión (minutos)", min_value=1, value=120)
-    st.divider()
-    activar_ep = st.checkbox("Monitorear EmpleosPublicos.cl", value=True)
-    busqueda_ep = st.text_input("Cargo en Portal", value="informatica")
+    urls_input = st.text_area("URLs Municipales", value=cargar_urls(), height=200)
+    keywords_input = st.text_input("Palabras Clave", value="concurso público, informática, soporte, técnico, bases, llamado")
+    intervalo = st.number_input("Intervalo (minutos)", min_value=1, value=120)
+    if st.button("💾 Guardar y Reiniciar"):
+        with open("sitios.txt", "w") as f:
+            f.write(urls_input)
+        st.rerun()
 
-if st.sidebar.button("💾 Guardar y Reiniciar"):
-    with open("sitios.txt", "w") as f:
-        f.write(urls_input)
-    st.sidebar.success("Sincronizando...")
-    st.rerun()
-
-# --- LÓGICA DE SCRAPING ---
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'es-ES,es;q=0.8',
-    'Connection': 'keep-alive',
-}
-
+# --- LÓGICA DE ESCANEO ---
 lista_urls = [url.strip() for url in urls_input.split('\n') if url.strip()]
 lista_keywords = [kw.strip().lower() for kw in keywords_input.split(',') if kw.strip()]
 
-st.info(f"🚀 Monitor activo. Ciclo de {intervalo} minutos.")
-st.write(f"--- Última Revisión: **{datetime.now(chile_tz).strftime('%H:%M:%S')}** ---")
+ahora_chile = datetime.now(chile_tz).strftime("%H:%M:%S")
+st.info(f"🚀 Monitor activo. Última revisión: {ahora_chile}")
 
-# --- GRIDS DE RESULTADOS ---
-num_columnas = 4 # Define cuántos cubos por fila (3 o 4 se ve bien en escritorio)
-contenedor_grid = st.container()
+cols = st.columns(4)
+idx_col = 0
+header_fake = {'User-Agent': 'Mozilla/5.0'}
 
-while True:
-    with contenedor_grid:
-        cols = st.columns(num_columnas)
-        muni_idx = 0
-        
-        for url in lista_urls:
-            nombre_muni = extrair_nombre_muni(url)
-            status_class = "status-ok"
-            status_text = "Sin novedades específicas."
-            enlaces_texto_list = ""
-            enviar_notif = False
-            
-            try:
-                # 1. Intentar conectar
-                res = requests.get(url, headers=headers, timeout=25, verify=False)
-                res.raise_for_status() 
-                soup = BeautifulSoup(res.text, 'html.parser')
-                enlaces_encontrados = []
-                
-                # 2. Buscar palabras clave
-                for a in soup.find_all('a', href=True):
-                    texto = a.get_text().strip().lower()
-                    href = a['href'].lower()
-                    
-                    if any(kw in texto for kw in lista_keywords) or any(kw in href for kw in lista_keywords):
-                        if "facebook" in href or "twitter" in href or "instagram" in href: continue
-                            
-                        link_final = a['href']
-                        if not link_final.startswith('http'):
-                            link_final = url.rstrip('/') + '/' + link_final.lstrip('/')
-                        enlaces_encontrados.append(link_final)
-                
-                # 3. Procesar resultados
-                if enlaces_encontrados:
-                    enlaces_encontrados = list(set(enlaces_encontrados)) # Eliminar duplicados
-                    status_class = "status-found"
-                    status_text = f"¡Alerta! {len(enlaces_encontrados)} hallazgo(s)."
-                    for link in enlaces_encontrados[:3]: # Solo mostrar los primeros 3 links en la tarjeta
-                        texto_recortado = link.split('/')[-1][:25] + "..." if len(link.split('/')[-1]) > 25 else link.split('/')[-1]
-                        enlaces_texto_list += f"<li>🔗 {texto_recortado}</li>"
-                    if len(enlaces_encontrados) > 3:
-                        enlaces_texto_list += "<li>... y más</li>"
-                    enviar_notif = True
-                    enviar_telegram(f"🏢 *{nombre_muni.upper()}:* Hallazgo(s) detectado(s)\n🔗 " + "\n🔗 ".join(enlaces_encontrados))
+for url in lista_urls:
+    nombre_muni = extrair_nombre_muni(url)
+    enlaces_encontrados = []
+    error_msg = None
+    try:
+        res = requests.get(url, headers=header_fake, timeout=20, verify=False)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        for a in soup.find_all('a', href=True):
+            texto_link = a.get_text().lower()
+            href = a['href']
+            if any(kw in texto_link for kw in lista_keywords) and es_contenido_valido(texto_link) and es_contenido_valido(href):
+                final_link = href if href.startswith('http') else url.rstrip('/') + '/' + href.lstrip('/')
+                enlaces_encontrados.append(final_link)
+    except:
+        error_msg = "Error de conexión."
 
-            except Exception as e:
-                # 4. Manejar Errores (Falla de conexión o bloqueo)
-                status_class = "status-error"
-                status_text = "Error de conexión/bloqueo."
+    with cols[idx_col % 4]:
+        if error_msg:
+            st.markdown(f"<div class='muni-card muni-error'><h3>{nombre_muni}</h3><p style='color:orange;'>{error_msg}</p></div>", unsafe_allow_html=True)
+        elif enlaces_encontrados:
+            enlaces_unicos = list(set(enlaces_encontrados))
+            st.markdown(f"<div class='muni-card muni-alerta'><h3>{nombre_muni}</h3><p style='color:red;'><b>¡Alerta! {len(enlaces_unicos)} hallazgos.</b></p></div>", unsafe_allow_html=True)
+            enviar_telegram(f"🚨 ALERTA: {nombre_muni} - {enlaces_unicos[0]}")
+        else:
+            st.markdown(f"<div class='muni-card muni-ok'><h3>{nombre_muni}</h3><p style='color:green;'>Sin novedades.</p></div>", unsafe_allow_html=True)
+    idx_col += 1
 
-            # --- DIBUJAR LA TARJETA (CUBO) ---
-            with cols[muni_idx % num_columnas]:
-                card_html = f"""
-                    <div class="muni-card {status_class}">
-                        <div>
-                            <div class="card-title">{nombre_muni}</div>
-                            <div class="card-status">{status_text}</div>
-                            <ul class="card-links">
-                                {enlaces_texto_list}
-                            </ul>
-                        </div>
-                        <a href="{url}" target="_blank" class="card-btn">Ir a la Web</a>
-                    </div>
-                """
-                st.markdown(card_html, unsafe_allow_html=True)
-            
-            muni_idx += 1
-
-        # --- SECCIÓN EMPLEOS PÚBLICOS (FUERA DEL GRID) ---
-        if activar_ep:
-            try:
-                # ... Lógica de Empleos Públicos (se mantiene igual, se dibuja abajo en formato lista o tarjeta grande)
-                # ... (He omitido el bloque para no alargar el mensaje, pero debes mantenerlo en tu código real)
-                pass 
-            except: pass
-
-    time.sleep(intervalo * 60)
-    st.rerun()
+time.sleep(intervalo * 60)
+st.rerun()
