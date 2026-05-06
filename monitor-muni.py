@@ -37,6 +37,7 @@ def extrair_nombre_muni(url):
         "recoleta.cl": "Recoleta",
         "pirque.cl": "Pirque",
         "loprado.cl": "Lo Prado",
+        "lareina.cl": "La Reina",
         "empleospublicos.cl": "Portal Empleos Públicos"
     }
     url_lower = url.lower()
@@ -46,10 +47,19 @@ def extrair_nombre_muni(url):
     return url.split("//")[-1].split("/")[0]
 
 def es_contenido_valido(texto_o_url):
-    palabras_basura = ["vacunacion", "vacunación", "influenza", "cuenta-publica", "youtube", "watch?v", "eleccionarios", "pago-de-permiso", "pagos"]
+    basura = [
+        "vacunacion", "vacunación", "influenza", "covid", "campaña", 
+        "youtube", "watch?v", "facebook", "twitter", "instagram",
+        "cuenta-publica", "eleccionarios", "pago-de-permiso", "pagos",
+        "tgr.cl", "servel.cl", "en-vivo", "taller", "deporte", "cultura"
+    ]
     texto_lower = texto_o_url.lower()
-    if any(basura in texto_lower for basura in palabras_basura):
+    if any(b in texto_lower for b in basura):
         return False
+    años_viejos = ["2021", "2022", "2023", "2024", "2025"]
+    if any(año in texto_lower for año in años_viejos):
+        if "2026" not in texto_lower:
+            return False
     return True
 
 def enviar_telegram(mensaje):
@@ -77,12 +87,28 @@ st.markdown("""
         padding: 15px;
         margin: 10px;
         border: 2px solid #f0f2f6;
-        height: 250px;
+        height: 280px;
         overflow-y: auto;
+        display: flex;
+        flex-direction: column;
     }
     .muni-alerta { border: 2px solid #ff4b4b; background-color: #fffafa; }
     .muni-ok { border: 2px solid #28a745; background-color: #f8fff9; }
     .muni-error { border: 2px solid #ffa500; background-color: #fffaf0; }
+    .btn-muni {
+        width: 100%;
+        border: none;
+        border-radius: 5px;
+        background-color: #52a1e5;
+        color: white;
+        padding: 8px;
+        margin-top: 5px;
+        cursor: pointer;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 14px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -96,24 +122,22 @@ with st.sidebar:
             f.write(urls_input)
         st.rerun()
 
-# --- LÓGICA DE ESCANEO ---
+# --- LÓGICA DE ESCANEO AGRUPADO ---
 lista_urls = [url.strip() for url in urls_input.split('\n') if url.strip()]
 lista_keywords = [kw.strip().lower() for kw in keywords_input.split(',') if kw.strip()]
 
-ahora_chile = datetime.now(chile_tz).strftime("%H:%M:%S")
-st.info(f"🚀 Monitor activo. Última revisión: {ahora_chile}")
-
-cols = st.columns(4)
-idx_col = 0
-header_fake = {'User-Agent': 'Mozilla/5.0'}
+# Diccionario para agrupar links y hallazgos por nombre de municipio
+comunas_data = {}
 
 for url in lista_urls:
     nombre_muni = extrair_nombre_muni(url)
-    enlaces_encontrados = []
-    error_msg = None
+    if nombre_muni not in comunas_data:
+        comunas_data[nombre_muni] = {"urls": [], "hallazgos": [], "error": False}
     
-    # 1. Intenta conectarse a la web
+    comunas_data[nombre_muni]["urls"].append(url)
+    
     try:
+        header_fake = {'User-Agent': 'Mozilla/5.0'}
         res = requests.get(url, headers=header_fake, timeout=20, verify=False)
         soup = BeautifulSoup(res.text, 'html.parser')
         for a in soup.find_all('a', href=True):
@@ -121,38 +145,50 @@ for url in lista_urls:
             href = a['href']
             if any(kw in texto_link for kw in lista_keywords) and es_contenido_valido(texto_link) and es_contenido_valido(href):
                 final_link = href if href.startswith('http') else url.rstrip('/') + '/' + href.lstrip('/')
-                enlaces_encontrados.append(final_link)
+                comunas_data[nombre_muni]["hallazgos"].append(final_link)
     except:
-        error_msg = "Error de conexión."
+        comunas_data[nombre_muni]["error"] = True
 
-    # 2. Dibuja el cubo con el botón de "Ir a la Web"
+# --- RENDERIZADO DE CUBOS ---
+ahora_chile = datetime.now(chile_tz).strftime("%H:%M:%S")
+st.info(f"🚀 Monitor activo. Última revisión: {ahora_chile}")
+
+cols = st.columns(4)
+idx_col = 0
+
+for nombre, data in comunas_data.items():
     with cols[idx_col % 4]:
-        if error_msg:
-            st.markdown(f"""
-                <div class='muni-card muni-error'>
-                    <h3>{nombre_muni}</h3>
-                    <p style='color:orange;'>{error_msg}</p>
-                    <a href='{url}' target='_blank'><button style='width:100%; border:none; border-radius:5px; background-color:#52a1e5; color:white; padding:5px; cursor:pointer;'>Ir a la Web</button></a>
+        # Determinar estado para el color
+        clase_css = "muni-ok"
+        if data["error"]: clase_css = "muni-error"
+        if data["hallazgos"]: clase_css = "muni-alerta"
+        
+        hallazgos_unicos = list(set(data["hallazgos"]))
+        
+        # Generar botones para las URLs (Opción 1, Opción 2...)
+        botones_html = ""
+        for i, u in enumerate(data["urls"]):
+            label = "Ir a la Web" if len(data["urls"]) == 1 else f"Opción {i+1}"
+            botones_html += f"<a href='{u}' target='_blank' class='btn-muni'>{label}</a>"
+
+        # Crear el cubo
+        alerta_txt = f"<p style='color:red;'><b>🚨 {len(hallazgos_unicos)} hallazgos!</b></p>" if hallazgos_unicos else "<p style='color:green;'>Sin novedades.</p>"
+        error_txt = "<p style='color:orange;'>Error parcial de conexión.</p>" if data["error"] and not hallazgos_unicos else ""
+
+        st.markdown(f"""
+            <div class='muni-card {clase_css}'>
+                <h3 style='margin-bottom:5px;'>{nombre}</h3>
+                <hr style='margin:5px 0;'>
+                {alerta_txt}
+                {error_txt}
+                <div style='margin-top: auto;'>
+                    {botones_html}
                 </div>
-            """, unsafe_allow_html=True)
-        elif enlaces_encontrados:
-            enlaces_unicos = list(set(enlaces_encontrados))
-            st.markdown(f"""
-                <div class='muni-card muni-alerta'>
-                    <h3>{nombre_muni}</h3>
-                    <p style='color:red;'><b>¡Alerta! {len(enlaces_unicos)} hallazgos.</b></p>
-                    <a href='{url}' target='_blank'><button style='width:100%; border:none; border-radius:5px; background-color:#52a1e5; color:white; padding:5px; cursor:pointer;'>Ir a la Web</button></a>
-                </div>
-            """, unsafe_allow_html=True)
-            enviar_telegram(f"🚨 ALERTA: {nombre_muni} - {enlaces_unicos[0]}")
-        else:
-            st.markdown(f"""
-                <div class='muni-card muni-ok'>
-                    <h3>{nombre_muni}</h3>
-                    <p style='color:green;'>Sin novedades.</p>
-                    <a href='{url}' target='_blank'><button style='width:100%; border:none; border-radius:5px; background-color:#52a1e5; color:white; padding:5px; cursor:pointer;'>Ir a la Web</button></a>
-                </div>
-            """, unsafe_allow_html=True)
+            </div>
+        """, unsafe_allow_html=True)
+        
+        if hallazgos_unicos:
+            enviar_telegram(f"🚨 ALERTA: {nombre}\nSe encontraron {len(hallazgos_unicos)} posibles concursos. Revisa las opciones en el Dashboard.")
     
     idx_col += 1
 
